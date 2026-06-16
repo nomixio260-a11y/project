@@ -1,0 +1,20 @@
+{
+  "name": "DataSaver Browser",
+  "short_name": "DataSaver",
+  "description": "通信量を節約するプロキシ型ブラウザ。画像・動画・HTMLをサーバー側で圧縮して配信します。",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#f4f5f7",
+  "theme_color": "#2b2f36",
+  "lang": "ja",
+  "icons": [
+    {
+      "src": "/public/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}
