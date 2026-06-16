@@ -47,6 +47,26 @@ describe("processHtml (normal mode)", () => {
     expect(html).not.toContain("<iframe");
   });
 
+  it("sizes images to the device width and collapses srcset", async () => {
+    const input = `<html><body>
+      <img src="/pic.jpg" srcset="/pic-1x.jpg 1x, /pic-2x.jpg 2x">
+    </body></html>`;
+    const { html } = await processHtml(input, BASE, { text: false, dw: 360, dpr: 1 });
+    // 端末幅360px → /img の w=360 で要求
+    expect(html).toContain("/img?url=https%3A%2F%2Fexample.com%2Fpic.jpg");
+    expect(html).toContain("w=360");
+    // 重複DLを避けるため srcset は除去
+    expect(html).not.toContain("srcset");
+    expect(html).not.toContain("pic-2x");
+  });
+
+  it("propagates device hints (dw/dpr) on navigation links", async () => {
+    const input = `<html><body><a href="/next">n</a></body></html>`;
+    const { html } = await processHtml(input, BASE, { text: false, dw: 412, dpr: 2 });
+    expect(html).toContain("dw=412");
+    expect(html).toContain("dpr=2");
+  });
+
   it("injects utf-8 charset and CSP", async () => {
     const input = `<html><head><meta charset="shift_jis"></head><body>x</body></html>`;
     const { html } = await processHtml(input, BASE, { text: false });

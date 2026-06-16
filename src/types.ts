@@ -5,6 +5,10 @@ export type VideoCodec = "av1" | "vp9" | "h264";
 export interface RewriteOptions {
   /** テキスト優先モード（画像・動画を省略） */
   text: boolean;
+  /** デバイスのCSS表示幅(px)。画像を端末に合わせて縮小するためのヒント */
+  dw?: number;
+  /** デバイスピクセル比(devicePixelRatio)。Retina等で適度に高解像度を許可 */
+  dpr?: number;
 }
 
 export interface FetchResult {

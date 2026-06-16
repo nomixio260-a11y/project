@@ -20,11 +20,25 @@ export function toAbsolute(href: string, base: string): string | null {
   }
 }
 
-/** ナビゲーションリンクを /browse 経由に変換（textフラグを伝播） */
+/** ナビゲーションリンクを /browse 経由に変換（text/デバイスヒントを伝播） */
 export function toProxyUrl(absUrl: string, opts: RewriteOptions): string {
   const params = new URLSearchParams({ url: absUrl });
   if (opts.text) params.set("text", "1");
+  // デバイスヒントを伝播し、iframe内ナビゲーションでも端末最適化を維持する
+  if (opts.dw) params.set("dw", String(opts.dw));
+  if (opts.dpr) params.set("dpr", String(opts.dpr));
   return `/browse?${params.toString()}`;
+}
+
+/**
+ * デバイス幅とDPRから、この端末に最適な画像の最大幅(px)を算出する。
+ * dwが無ければ既定幅。DPRは過剰な高解像度要求を防ぐため2倍までに丸める。
+ */
+export function effectiveImageWidth(opts: RewriteOptions): number {
+  if (!opts.dw || opts.dw <= 0) return config.imageDefaultWidth;
+  const dpr = Math.min(Math.max(opts.dpr ?? 1, 1), 2);
+  const target = Math.round(opts.dw * dpr);
+  return Math.max(64, Math.min(target, config.imageMaxWidth));
 }
 
 /** 画像URLを /img 経由（最適化）に変換 */

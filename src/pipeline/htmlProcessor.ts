@@ -11,7 +11,7 @@ import {
   toProxyUrl,
   toImageUrl,
   toVideoUrl,
-  rewriteSrcset,
+  effectiveImageWidth,
 } from "./urlRewriter.js";
 import { processCss } from "./cssProcessor.js";
 import type { ProcessedHtml, RewriteOptions } from "../types.js";
@@ -106,7 +106,7 @@ export async function processHtml(
       e.attr("style", style.replace(/background(-image)?\s*:[^;]*;?/gi, ""));
     });
   } else {
-    rewriteImages($, base);
+    rewriteImages($, base, effectiveImageWidth(opts));
     rewriteVideos($, base);
     rewriteEmbeds($, base);
   }
@@ -159,8 +159,8 @@ export async function processHtml(
   };
 }
 
-/** <img> と srcset を /img 経由に書き換え */
-function rewriteImages($: cheerio.CheerioAPI, base: string): void {
+/** <img> と srcset を /img 経由に書き換え（width はデバイスに合わせる） */
+function rewriteImages($: cheerio.CheerioAPI, base: string, imgWidth: number): void {
   $("img").each((_, el) => {
     const e = $(el);
     // lazy-load属性を実体化
@@ -168,23 +168,18 @@ function rewriteImages($: cheerio.CheerioAPI, base: string): void {
     const src = e.attr("src") ?? lazySrc;
     if (src) {
       const abs = toAbsolute(src, base);
-      if (abs) e.attr("src", toImageUrl(abs));
+      if (abs) e.attr("src", toImageUrl(abs, { w: imgWidth }));
       else e.removeAttr("src");
     }
     e.removeAttr("data-src").removeAttr("data-original").removeAttr("data-lazy-src");
     e.attr("loading", "lazy");
 
-    const srcset = e.attr("srcset") ?? e.attr("data-srcset");
-    if (srcset) {
-      e.attr("srcset", rewriteSrcset(srcset, base, (abs) => toImageUrl(abs)));
-      e.removeAttr("data-srcset");
-    }
+    // srcset はデバイス幅で最適化済みの単一srcに集約し、重複DL候補を排除する
+    e.removeAttr("srcset").removeAttr("data-srcset").removeAttr("sizes");
   });
 
-  $("picture source[srcset]").each((_, el) => {
-    const e = $(el);
-    e.attr("srcset", rewriteSrcset(e.attr("srcset")!, base, (abs) => toImageUrl(abs)));
-  });
+  // <picture> の複数候補も不要（imgのsrcに集約）。source を除去して通信を削減
+  $("picture source").remove();
 }
 
 /** <video>/<source> 直リンク動画を /video 経由（トランスコード）に書き換え */

@@ -15,6 +15,8 @@ import { renderErrorPage } from "./errorPage.js";
 interface BrowseQuery {
   url: string;
   text?: string;
+  dw?: number;
+  dpr?: number;
 }
 
 const browseSchema = {
@@ -24,13 +26,16 @@ const browseSchema = {
     properties: {
       url: { type: "string", pattern: "^https?://" },
       text: { type: "string", enum: ["0", "1"] },
+      // デバイス表示幅(px)とピクセル比。画像を端末サイズに合わせて縮小する
+      dw: { type: "integer", minimum: 16, maximum: 4096 },
+      dpr: { type: "number", minimum: 1, maximum: 4 },
     },
   },
 };
 
 export async function registerBrowse(app: FastifyInstance): Promise<void> {
   app.get<{ Querystring: BrowseQuery }>("/browse", { schema: browseSchema }, async (req, reply) => {
-    const { url } = req.query;
+    const { url, dw, dpr } = req.query;
     const text = req.query.text === "1";
 
     try {
@@ -45,7 +50,7 @@ export async function registerBrowse(app: FastifyInstance): Promise<void> {
       }
 
       const html = decodeHtml(result.body, result.charset);
-      const processed = await processHtml(html, result.finalUrl, { text });
+      const processed = await processHtml(html, result.finalUrl, { text, dw, dpr });
 
       reply
         .header("content-type", "text/html; charset=utf-8")

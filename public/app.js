@@ -1,11 +1,12 @@
 /**
  * 親シェルのスクリプト。プロキシ済みページ（同一オリジンのiframe）はJSを
  * 除去済みなので、対話的処理は全てここ（親）から行う:
- *   - URL移動 / テキストモード切替
+ *   - URL移動 / テキストモード切替 / 戻る・進む・再読み込み（独自履歴）
+ *   - デバイス幅・DPRを /browse に伝え、画像を端末サイズに最適化
  *   - iframe内リンク・GETフォームのプロキシ経由ナビ補助
  *   - 動画コーデックのクライアント能力判定 → /video の codec 差し替え
  *   - 埋め込み動画の click-to-play 展開
- *   - 節約メーター表示
+ *   - ローディング表示 / 節約メーター表示
  */
 (function () {
   "use strict";
@@ -16,6 +17,10 @@
   var iframe = document.getElementById("page");
   var welcome = document.getElementById("welcome");
   var savingsEl = document.getElementById("savings");
+  var backBtn = document.getElementById("back");
+  var fwdBtn = document.getElementById("forward");
+  var reloadBtn = document.getElementById("reload");
+  var progress = document.getElementById("progress");
 
   /** クライアントが再生可能な最良コーデックを判定（AV1 → VP9 → H.264） */
   function bestCodec() {
@@ -26,13 +31,42 @@
   }
   var CODEC = bestCodec();
 
-  function navigate(targetUrl) {
-    if (!targetUrl) return;
+  /** この端末の画像最適化ヒント（CSS表示幅とピクセル比） */
+  function deviceHints() {
+    var dw = Math.round(document.documentElement.clientWidth || window.innerWidth || 0);
+    var dpr = window.devicePixelRatio || 1;
+    return { dw: dw, dpr: Math.round(dpr * 100) / 100 };
+  }
+
+  /** 元URL+モードから /browse パスを組み立てる（デバイスヒントを付与） */
+  function buildBrowseUrl(targetUrl) {
     if (!/^https?:\/\//i.test(targetUrl)) targetUrl = "https://" + targetUrl;
+    var d = deviceHints();
     var u = "/browse?url=" + encodeURIComponent(targetUrl);
     if (textmode.checked) u += "&text=1";
+    if (d.dw) u += "&dw=" + d.dw + "&dpr=" + d.dpr;
+    return u;
+  }
+
+  // ===== 独自履歴（戻る・進む） =====
+  var stack = []; // /browse パスの配列
+  var pos = -1; // 現在位置
+  var suppressPush = false; // 戻る/進む/再読込による遷移はpushしない
+
+  function load(browsePath) {
     welcome.style.display = "none";
-    iframe.src = u;
+    startLoading();
+    iframe.src = browsePath;
+  }
+
+  function navigate(targetUrl) {
+    if (!targetUrl) return;
+    load(buildBrowseUrl(targetUrl));
+  }
+
+  function updateNavButtons() {
+    backBtn.disabled = pos <= 0;
+    fwdBtn.disabled = pos >= stack.length - 1;
   }
 
   form.addEventListener("submit", function (e) {
@@ -40,8 +74,32 @@
     navigate(address.value.trim());
   });
 
+  backBtn.addEventListener("click", function () {
+    if (pos > 0) {
+      pos--;
+      suppressPush = true;
+      load(stack[pos]);
+      updateNavButtons();
+    }
+  });
+
+  fwdBtn.addEventListener("click", function () {
+    if (pos < stack.length - 1) {
+      pos++;
+      suppressPush = true;
+      load(stack[pos]);
+      updateNavButtons();
+    }
+  });
+
+  reloadBtn.addEventListener("click", function () {
+    if (pos >= 0) {
+      suppressPush = true;
+      load(stack[pos]);
+    }
+  });
+
   textmode.addEventListener("change", function () {
-    // 現在表示中のURLを同モードで再読み込み
     var cur = currentProxiedUrl();
     if (cur) navigate(cur);
   });
@@ -57,7 +115,27 @@
     }
   }
 
+  /** iframeの現在パス(/browse?...)を取得（履歴比較用） */
+  function currentBrowsePath() {
+    try {
+      var l = iframe.contentWindow.location;
+      return l.pathname + l.search;
+    } catch (e) {
+      return null;
+    }
+  }
+
+  // ===== ローディング表示 =====
+  function startLoading() {
+    progress.hidden = false;
+  }
+  function stopLoading() {
+    progress.hidden = true;
+  }
+
   iframe.addEventListener("load", function () {
+    stopLoading();
+
     var doc;
     try {
       doc = iframe.contentDocument;
@@ -66,6 +144,19 @@
     }
     if (!doc) return;
 
+    // 履歴へ反映（戻る/進む/再読込以外の新規遷移のみ追加）
+    var path = currentBrowsePath();
+    if (path && path.indexOf("/browse") === 0) {
+      if (suppressPush) {
+        suppressPush = false;
+      } else if (stack[pos] !== path) {
+        stack = stack.slice(0, pos + 1);
+        stack.push(path);
+        pos = stack.length - 1;
+      }
+    }
+    updateNavButtons();
+
     // アドレスバーを実URLに同期
     var cur = currentProxiedUrl();
     if (cur) address.value = cur;
@@ -73,6 +164,7 @@
     enhanceVideos(doc);
     enhanceEmbeds(doc);
     interceptForms(doc);
+    interceptLinks(doc);
     showSavings(doc);
   });
 
@@ -87,7 +179,6 @@
     for (var i = 0; i < videos.length; i++) setCodec(videos[i]);
     var sources = doc.querySelectorAll("video source[data-dsp-src]");
     for (var j = 0; j < sources.length; j++) setCodec(sources[j]);
-    // source差し替え後は load() で反映
     var vids = doc.querySelectorAll("video.dsp-video");
     for (var k = 0; k < vids.length; k++) {
       try {
@@ -134,6 +225,24 @@
         });
       })(forms[i]);
     }
+  }
+
+  /**
+   * iframe内リンクのクリックを親で受けて独自履歴に乗せる。
+   * （リンクは既に /browse?url=... へ書き換え済みなので、元URLを取り出して
+   *   デバイスヒント付きで navigate し直す）
+   */
+  function interceptLinks(doc) {
+    doc.addEventListener("click", function (e) {
+      var a = e.target && e.target.closest ? e.target.closest("a[href]") : null;
+      if (!a) return;
+      var href = a.getAttribute("href") || "";
+      var m = href.match(/[?&]url=([^&]+)/);
+      if (href.indexOf("/browse") !== -1 && m) {
+        e.preventDefault();
+        navigate(decodeURIComponent(m[1]));
+      }
+    });
   }
 
   /** 節約メーター: 元HTMLバイト数 vs 実際に受信したバイト数 */

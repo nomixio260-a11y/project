@@ -5,7 +5,9 @@ import {
   toImageUrl,
   toVideoUrl,
   rewriteSrcset,
+  effectiveImageWidth,
 } from "../src/pipeline/urlRewriter.js";
+import { config } from "../src/config.js";
 
 const BASE = "https://example.com/dir/page.html";
 
@@ -46,10 +48,38 @@ describe("proxy url helpers", () => {
     expect(u).toContain("q=");
   });
 
+  it("propagates device hints (dw/dpr) through navigation links", () => {
+    expect(toProxyUrl("https://a.com/x", { text: true, dw: 400, dpr: 2 })).toBe(
+      "/browse?url=https%3A%2F%2Fa.com%2Fx&text=1&dw=400&dpr=2",
+    );
+    expect(toProxyUrl("https://a.com/x", { text: false, dw: 360 })).toBe(
+      "/browse?url=https%3A%2F%2Fa.com%2Fx&dw=360",
+    );
+  });
+
   it("routes videos through /video with codec", () => {
     expect(toVideoUrl("https://a.com/v.mp4", "av1")).toBe(
       "/video?url=https%3A%2F%2Fa.com%2Fv.mp4&codec=av1",
     );
+  });
+});
+
+describe("effectiveImageWidth", () => {
+  it("falls back to the default width when no device hint is given", () => {
+    expect(effectiveImageWidth({ text: false })).toBe(config.imageDefaultWidth);
+  });
+
+  it("scales by device width and DPR (DPR capped at 2)", () => {
+    expect(effectiveImageWidth({ text: false, dw: 360, dpr: 1 })).toBe(360);
+    expect(effectiveImageWidth({ text: false, dw: 360, dpr: 3 })).toBe(720); // 3xは2xに丸め
+  });
+
+  it("never exceeds the configured max width", () => {
+    expect(effectiveImageWidth({ text: false, dw: 4000, dpr: 2 })).toBe(config.imageMaxWidth);
+  });
+
+  it("clamps to a sane minimum for tiny widths", () => {
+    expect(effectiveImageWidth({ text: false, dw: 10, dpr: 1 })).toBe(64);
   });
 });
 
