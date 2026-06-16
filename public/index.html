@@ -1,0 +1,45 @@
+<!doctype html>
+<html lang="ja">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>DataSaver Browser</title>
+    <link rel="stylesheet" href="/public/style.css" />
+  </head>
+  <body>
+    <header class="toolbar">
+      <form id="nav" class="nav">
+        <input
+          id="address"
+          class="address"
+          type="text"
+          inputmode="url"
+          placeholder="URLを入力（例: https://example.com）"
+          autocomplete="off"
+          autocapitalize="off"
+          spellcheck="false"
+        />
+        <button id="go" type="submit" class="go">移動</button>
+      </form>
+      <label class="text-toggle">
+        <input id="textmode" type="checkbox" />
+        テキスト優先
+      </label>
+      <span id="savings" class="savings" hidden></span>
+    </header>
+    <main class="viewport">
+      <iframe id="page" title="ページ表示" referrerpolicy="no-referrer"></iframe>
+      <div id="welcome" class="welcome">
+        <h1>DataSaver Browser</h1>
+        <p>URLを入力すると、サーバー側でページを取得・圧縮して表示します。</p>
+        <ul>
+          <li>画像はWebPへ再圧縮・縮小</li>
+          <li>広告・スクリプト・トラッカーを除去</li>
+          <li>動画は高効率コーデック(AV1/VP9)へ再エンコード</li>
+          <li>HTML/CSSを最小化し、Brotliで圧縮配信</li>
+        </ul>
+      </div>
+    </main>
+    <script src="/public/app.js"></script>
+  </body>
+</html>
