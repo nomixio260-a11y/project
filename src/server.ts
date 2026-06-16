@@ -9,6 +9,7 @@ import { registerUi } from "./routes/ui.js";
 import { registerBrowse } from "./routes/browse.js";
 import { registerImage } from "./routes/image.js";
 import { registerVideo } from "./routes/video.js";
+import { registerAccessGuard } from "./security/accessGuard.js";
 
 export async function buildServer(): Promise<FastifyInstance> {
   const app = Fastify({
@@ -29,6 +30,9 @@ export async function buildServer(): Promise<FastifyInstance> {
     max: config.rateLimitMax,
     timeWindow: "1 minute",
   });
+
+  // アクセストークン認証（ACCESS_TOKEN設定時のみ。公開トンネルの保護用）
+  registerAccessGuard(app);
 
   app.get("/healthz", async () => ({ status: "ok" }));
 

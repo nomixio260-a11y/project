@@ -72,11 +72,34 @@ npm run build && npm start
 
 ブラウザで `http://localhost:3000/` を開き、アドレスバーにURLを入力します。
 
+## GitHub Actions で公開（Cloudflare Tunnel）
+
+GitHub Actions 上でビルド・起動し、**Cloudflare のクイックトンネル**
+（アカウント不要・無料・一時的な `https://<ランダム>.trycloudflare.com`）で
+インターネットに公開できます。
+
+1. リポジトリの **Actions** タブ → **Public Tunnel** → **Run workflow**
+2. 公開時間（分）と「アクセストークンで保護」を選んで実行
+3. 実行ログ末尾の **Summary** に公開URLが表示されます
+   （保護オン時は `https://<ランダム>.trycloudflare.com/?token=...`）
+4. そのURLをスマホ／PCのブラウザで開く
+
+ワークフロー: `.github/workflows/tunnel.yml`（公開）/ `.github/workflows/ci.yml`
+（push毎のビルド・型チェック・テスト）。
+
+> **セキュリティ**: 公開トンネルはオープンプロキシ濫用の対象になり得ます。既定では
+> ランダムな `ACCESS_TOKEN` を発行し、`?token=...` 付きURLから開いた利用者だけが
+> 使えるよう Cookie で保護します（保護をオフにすると誰でも使えるので短時間のみ推奨）。
+> 安定した独自ドメインが必要な場合は、Cloudflare の名前付きトンネル（トークンを
+> リポジトリ Secret に設定）に差し替えてください。
+
 ### 環境変数（主なもの）
 
 | 変数 | 既定 | 説明 |
 | --- | --- | --- |
 | `PORT` | 3000 | リッスンポート |
+| `HOST` | 0.0.0.0 | バインドアドレス |
+| `ACCESS_TOKEN` | (未設定) | 設定すると認証ゲートが有効。`/?token=...`でCookie発行した利用者のみ許可（公開時の保護用） |
 | `FETCH_TIMEOUT_MS` | 10000 | 上流fetchタイムアウト |
 | `MAX_HTML_BYTES` | 10MB | HTMLサイズ上限 |
 | `MAX_VIDEO_BYTES` | 200MB | 動画ソースサイズ上限 |
@@ -96,6 +119,7 @@ npm test
 - `htmlProcessor` — スクリプト/広告除去、リンク/画像/動画書き換え、テキストモード
 - `imageOptimizer` — WebP変換・リサイズ・SVGパススルー
 - `videoTranscoder` — AV1/VP9/H.264 への再エンコード（ffmpeg検出時のみ）
+- `accessGuard` — アクセストークン認証（401・Cookie発行・Cookie認証）
 - `browse.e2e` — MockAgentで上流をモックした統合テスト
 
 ## セキュリティ上の注意

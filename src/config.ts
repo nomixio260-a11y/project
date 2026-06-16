@@ -38,6 +38,13 @@ export const config = {
 
   /** レート制限（1分あたりのリクエスト数） */
   rateLimitMax: intEnv("RATE_LIMIT_MAX", 120),
+
+  /**
+   * アクセストークン。設定されている場合のみ認証ゲートが有効になり、
+   * `/?token=...` でCookieを発行した利用者だけがプロキシを使える。
+   * 公開トンネルでのオープンプロキシ濫用を防ぐ（未設定なら認証なし）。
+   */
+  accessToken: process.env.ACCESS_TOKEN ?? "",
 } as const;
 
 export type AppConfig = typeof config;

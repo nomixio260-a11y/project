@@ -1,0 +1,126 @@
+name: Public Tunnel
+
+# 手動実行（Actionsタブ → Public Tunnel → Run workflow）で、
+# DataSaver Browser をビルド・起動し、Cloudflare のクイックトンネル
+# (アカウント不要・無料・一時的な https://<ランダム>.trycloudflare.com)
+# で一定時間だけ公開する。公開URLはログと実行サマリーに出力される。
+
+on:
+  workflow_dispatch:
+    inputs:
+      duration_minutes:
+        description: "公開を維持する時間（分）"
+        required: true
+        default: "30"
+      protect:
+        description: "アクセストークンで保護する（推奨）。オフにすると誰でも使えるオープンプロキシになります"
+        type: boolean
+        required: true
+        default: true
+
+jobs:
+  tunnel:
+    runs-on: ubuntu-latest
+    # GitHub Actions のジョブ上限（6時間）に合わせる
+    timeout-minutes: 360
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+
+      - name: Install ffmpeg
+        run: sudo apt-get update && sudo apt-get install -y ffmpeg
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build
+        run: npm run build
+
+      - name: Install cloudflared
+        run: |
+          curl -L --fail --output cloudflared.deb \
+            https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64.deb
+          sudo dpkg -i cloudflared.deb
+          cloudflared --version
+
+      - name: Start DataSaver Browser
+        run: |
+          # 保護が有効ならランダムなアクセストークンを生成
+          if [ "${{ inputs.protect }}" = "true" ]; then
+            TOKEN="$(openssl rand -hex 16)"
+            echo "::add-mask::$TOKEN"
+            echo "ACCESS_TOKEN=$TOKEN" >> "$GITHUB_ENV"
+          fi
+          # SSRF対策・レート制限は既定で有効のまま起動（ALLOW_PRIVATE_HOSTSは設定しない）
+          PORT=3000 HOST=0.0.0.0 ACCESS_TOKEN="${ACCESS_TOKEN:-}" \
+            nohup node dist/index.js > server.log 2>&1 &
+          echo "SERVER_PID=$!" >> "$GITHUB_ENV"
+          # 起動待ち（/healthz は認証不要）
+          for i in $(seq 1 30); do
+            if curl -sf http://127.0.0.1:3000/healthz > /dev/null; then
+              echo "server is up"; break
+            fi
+            sleep 1
+          done
+          curl -sf http://127.0.0.1:3000/healthz > /dev/null || {
+            echo "server failed to start"; cat server.log; exit 1; }
+
+      - name: Open Cloudflare quick tunnel
+        run: |
+          nohup cloudflared tunnel --no-autoupdate --url http://localhost:3000 \
+            > tunnel.log 2>&1 &
+          echo "TUNNEL_PID=$!" >> "$GITHUB_ENV"
+          # 公開URL(https://xxx.trycloudflare.com)が出力されるまで待つ
+          URL=""
+          for i in $(seq 1 30); do
+            URL="$(grep -oE 'https://[a-z0-9-]+\.trycloudflare\.com' tunnel.log | head -1 || true)"
+            [ -n "$URL" ] && break
+            sleep 2
+          done
+          if [ -z "$URL" ]; then
+            echo "failed to obtain tunnel URL"; cat tunnel.log; exit 1
+          fi
+          # 保護有効ならトークン付きURLを案内
+          if [ -n "${ACCESS_TOKEN:-}" ]; then
+            FULL="${URL}/?token=${ACCESS_TOKEN}"
+          else
+            FULL="$URL"
+          fi
+          echo "PUBLIC_URL=$FULL" >> "$GITHUB_ENV"
+          {
+            echo "## 🌐 DataSaver Browser を公開しました"
+            echo ""
+            echo "下記URLをスマホやPCのブラウザで開いてください（${{ inputs.duration_minutes }}分間有効）:"
+            echo ""
+            echo "**$FULL**"
+            echo ""
+            if [ -n "${ACCESS_TOKEN:-}" ]; then
+              echo "> 🔒 アクセストークンで保護されています。上記の \`?token=...\` 付きURLからのみ利用できます。"
+            else
+              echo "> ⚠️ 保護なし（オープンプロキシ）。短時間の利用にとどめてください。"
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
+          echo "::notice title=Public URL::$FULL"
+
+      - name: Keep the tunnel open
+        run: |
+          MINUTES="${{ inputs.duration_minutes }}"
+          echo "公開中: $PUBLIC_URL （${MINUTES}分）"
+          END=$(( $(date +%s) + MINUTES * 60 ))
+          while [ "$(date +%s)" -lt "$END" ]; do
+            if ! curl -sf http://127.0.0.1:3000/healthz > /dev/null; then
+              echo "server went down"; cat server.log; exit 1
+            fi
+            sleep 30
+          done
+          echo "公開時間が終了しました。停止します。"
+
+      - name: Stop processes
+        if: always()
+        run: |
+          kill "${TUNNEL_PID:-0}" 2>/dev/null || true
+          kill "${SERVER_PID:-0}" 2>/dev/null || true
