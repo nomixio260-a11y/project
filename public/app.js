@@ -47,21 +47,35 @@
     var u = "/browse?url=" + encodeURIComponent(targetUrl);
     if (textmode.checked) u += "&text=1";
     if (d.dw) u += "&dw=" + d.dw + "&dpr=" + d.dpr;
-    if (livemode.checked) {
-      // ライブ操作モード（常駐セッションで対話）。既存sidを再利用して状態を保つ
-      u += "&live=1";
-      if (currentSid) u += "&sid=" + currentSid;
-    } else if (spamode.checked) {
-      u += "&render=on";
-    }
+    if (spamode.checked) u += "&render=on";
     return u;
   }
 
-  // ===== ライブ操作モードの状態 =====
-  var currentSid = null; // 現在のライブセッションID（ページのmetaから取得）
-  var lastLiveUrl = null; // セッション期限切れ時に再オープンする実URL
-  var liveQueue = []; // 操作のFIFOキュー（iframe遷移を直列化しレースを防ぐ）
-  var liveBusy = false;
+  // ===== 操作モード（映像ストリーミング＝リモートブラウザ）の状態 =====
+  var streamUrl = null; // ストリーミング中の実URL
+
+  // サーバーがURL変化（SPA内遷移含む）を通知 → アドレスバー同期
+  if (window.DSPStream) {
+    window.DSPStream.onUrl(function (u) {
+      streamUrl = u;
+      address.value = u;
+    });
+  }
+
+  /** 操作モードでURLを開く（既存ストリームがあれば同一セッションのまま遷移） */
+  function streamOpen(targetUrl) {
+    if (!/^https?:\/\//i.test(targetUrl)) targetUrl = "https://" + targetUrl;
+    welcome.style.display = "none";
+    iframe.style.display = "none";
+    streamUrl = targetUrl;
+    address.value = targetUrl;
+    var d = deviceHints();
+    if (window.DSPStream.isActive()) {
+      window.DSPStream.navigate(targetUrl);
+    } else {
+      window.DSPStream.open(targetUrl, { dw: d.dw, dpr: d.dpr });
+    }
+  }
 
   // ===== 独自履歴（戻る・進む） =====
   var stack = []; // /browse パスの配列
@@ -76,6 +90,11 @@
 
   function navigate(targetUrl) {
     if (!targetUrl) return;
+    // 操作モードは映像ストリーミング、それ以外はプロキシ済みiframe表示
+    if (livemode.checked) {
+      streamOpen(targetUrl);
+      return;
+    }
     load(buildBrowseUrl(targetUrl));
   }
 
@@ -108,6 +127,10 @@
   });
 
   reloadBtn.addEventListener("click", function () {
+    if (livemode.checked && window.DSPStream.isActive() && streamUrl) {
+      window.DSPStream.navigate(streamUrl);
+      return;
+    }
     if (pos >= 0) {
       suppressPush = true;
       load(stack[pos]);
@@ -125,10 +148,17 @@
   });
 
   livemode.addEventListener("change", function () {
-    // モード切替時はセッションを作り直す（古いsidを引き継がない）
-    currentSid = null;
-    var cur = currentProxiedUrl() || lastLiveUrl;
-    if (cur) navigate(cur);
+    if (livemode.checked) {
+      // 操作モードON: 現在のページを映像ストリーミングで開き直す
+      var cur = currentProxiedUrl() || streamUrl || address.value.trim();
+      if (cur) streamOpen(cur);
+    } else {
+      // 操作モードOFF: ストリームを閉じ、通常のプロキシ表示へ戻す
+      var u = streamUrl;
+      window.DSPStream.close();
+      iframe.style.display = "";
+      if (u) navigate(u);
+    }
   });
 
   /** iframeの現在URL(/browse?url=...)から元URLを取り出す */
@@ -171,18 +201,6 @@
     }
     if (!doc) return;
 
-    // ライブ操作モード: セッション状態の取り込みと操作キューの進行
-    liveBusy = false;
-    if (doc.querySelector('meta[name="dsp-session-gone"]')) {
-      // 期限切れ → 同じ実URLでセッションを張り直す
-      currentSid = null;
-      liveQueue = [];
-      if (lastLiveUrl) navigate(lastLiveUrl);
-      return;
-    }
-    var sidMeta = doc.querySelector('meta[name="dsp-session"]');
-    currentSid = sidMeta ? sidMeta.getAttribute("content") : null;
-
     // 履歴へ反映（戻る/進む/再読込以外の新規遷移のみ追加）
     var path = currentBrowsePath();
     if (path && path.indexOf("/browse") === 0) {
@@ -196,27 +214,15 @@
     }
     updateNavButtons();
 
-    // アドレスバーを実URLに同期（ライブ中は dsp-url メタ＝SPA内遷移後のURLを優先）
-    var urlMeta = doc.querySelector('meta[name="dsp-url"]');
-    var cur = (urlMeta && urlMeta.getAttribute("content")) || currentProxiedUrl();
-    if (cur) {
-      address.value = cur;
-      if (currentSid) lastLiveUrl = cur;
-    }
+    // アドレスバーを実URLに同期
+    var cur = currentProxiedUrl();
+    if (cur) address.value = cur;
 
     enhanceVideos(doc);
     enhanceEmbeds(doc);
-    if (currentSid) {
-      // ライブ中はサーバー側ページへ操作を再現（フォームは操作で処理）
-      enhanceLive(doc, currentSid);
-    } else {
-      interceptForms(doc);
-    }
+    interceptForms(doc);
     interceptLinks(doc);
     showSavings(doc);
-
-    // キューに溜まった操作があれば次を実行
-    pumpLive();
   });
 
   /** 動画の src を最良コーデックに差し替える */
@@ -276,100 +282,6 @@
         });
       })(forms[i]);
     }
-  }
-
-  // ===== ライブ操作モード =====
-  // 要素がクリック対象らしいか（SPAはdivにも listener を付けるため cursor:pointer も見る）
-  var INTERACTIVE = "a,button,input,select,textarea,label,summary,[role=button],[role=link],[role=tab],[role=menuitem],[onclick],[tabindex]";
-  function isInteractive(doc, el) {
-    if (el.closest && el.closest(INTERACTIVE)) return true;
-    try {
-      return (doc.defaultView.getComputedStyle(el).cursor || "") === "pointer";
-    } catch (e) {
-      return false;
-    }
-  }
-
-  /** 操作をキューへ積み、iframe遷移を直列化して再現する（レース防止） */
-  function liveAction(sid, type, params) {
-    liveQueue.push({ sid: sid, type: type, params: params || {} });
-    if (liveQueue.length > 12) liveQueue.shift(); // 暴走防止
-    pumpLive();
-  }
-
-  function pumpLive() {
-    if (liveBusy || liveQueue.length === 0) return;
-    liveBusy = true;
-    var a = liveQueue.shift();
-    var p = a.params;
-    var u = "/interact?sid=" + encodeURIComponent(a.sid) + "&type=" + a.type;
-    if (p.ref != null) u += "&ref=" + encodeURIComponent(p.ref);
-    if (p.value != null) u += "&value=" + encodeURIComponent(p.value);
-    if (p.dy != null) u += "&dy=" + p.dy;
-    var d = deviceHints();
-    if (d.dw) u += "&dw=" + d.dw + "&dpr=" + d.dpr;
-    if (textmode.checked) u += "&text=1";
-    load(u); // 完了時の load ハンドラで liveBusy=false → pumpLive
-  }
-
-  /** ライブ中のiframe: クリック/入力/送信をサーバー側ページへ再現する */
-  function enhanceLive(doc, sid) {
-    // 入力値はchange(=blur)時に同期（毎キーストロークは送らず省データ）
-    doc.addEventListener(
-      "change",
-      function (e) {
-        var el = e.target;
-        if (!el || !el.getAttribute) return;
-        var ref = el.getAttribute("data-dsp-ref");
-        if (ref == null) return;
-        var tag = (el.tagName || "").toLowerCase();
-        if (tag === "input" || tag === "textarea" || tag === "select") {
-          liveAction(sid, "input", { ref: ref, value: el.value });
-        }
-      },
-      true,
-    );
-
-    // クリックの再現（プロキシ済みリンクは interceptLinks に委譲）
-    doc.addEventListener(
-      "click",
-      function (e) {
-        var t = e.target;
-        if (!t || !t.closest) return;
-        var a = t.closest("a[href]");
-        if (a && (a.getAttribute("href") || "").indexOf("/browse") !== -1) return;
-        if (!isInteractive(doc, t)) return; // 無反応な余白クリックで再読込しない
-        var el = t.closest("[data-dsp-ref]");
-        if (!el) return;
-        e.preventDefault();
-        liveAction(sid, "click", { ref: el.getAttribute("data-dsp-ref") });
-      },
-      true,
-    );
-
-    // フォーム送信(Enter等): 入力中の値を同期してから送信ボタンをクリック
-    doc.addEventListener(
-      "submit",
-      function (e) {
-        e.preventDefault();
-        var f = e.target;
-        var active = doc.activeElement;
-        if (
-          active &&
-          active.form === f &&
-          active.getAttribute &&
-          active.getAttribute("data-dsp-ref") != null &&
-          /^(input|textarea)$/i.test(active.tagName || "")
-        ) {
-          liveAction(sid, "input", { ref: active.getAttribute("data-dsp-ref"), value: active.value });
-        }
-        var btn = f.querySelector(
-          'button[type=submit][data-dsp-ref],input[type=submit][data-dsp-ref],button[data-dsp-ref]',
-        );
-        if (btn) liveAction(sid, "click", { ref: btn.getAttribute("data-dsp-ref") });
-      },
-      true,
-    );
   }
 
   /**

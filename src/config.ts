@@ -60,14 +60,20 @@ export const config = {
   /** Chromiumを --no-sandbox で起動（コンテナ/root環境で必要。OSサンドボックスは弱まる） */
   renderNoSandbox: process.env.RENDER_NO_SANDBOX === "1",
 
-  /** ライブ操作モード（サーバー側の常駐ページを保持し、クリック/入力を再現して
-   *  最適化HTMLのスナップショットだけを返す方式）を有効化（既定ON）。
-   *  ピクセル映像を流す“リモートブラウザ”と違い、転送は最適化HTMLのみで省データ。 */
+  /** ライブ操作モード（サーバー側の常駐ページを保持し、画面を映像フレーム
+   *  （CDPスクリーンキャスト）として配信し、クリック/入力を送り返す“リモートブラウザ”）。
+   *  ピクセル映像を流すため通信量は大きいが、動画再生を含む完全な操作が可能。 */
   enableLiveSessions: process.env.ENABLE_LIVE_SESSIONS !== "0",
-  /** 同時に保持するライブセッション（常駐ページ）の最大数。メモリ保護 */
+  /** 同時に張れる映像ストリーム（リモートブラウザ）の最大数。CPU/メモリ保護 */
   maxLiveSessions: intEnv("MAX_LIVE_SESSIONS", 4),
-  /** ライブセッションのアイドルTTL（ミリ秒）。これを超えたら常駐ページを破棄 */
-  liveSessionTtlMs: intEnv("LIVE_SESSION_TTL_MS", 5 * 60_000),
+
+  /** スクリーンキャストのJPEG品質(0-100)。下げるほど省データ */
+  streamQuality: intEnv("STREAM_QUALITY", 55),
+  /** Nフレームに1枚だけ送る（フレーム間引き）。大きいほど省データ・低fps */
+  streamEveryNthFrame: intEnv("STREAM_EVERY_NTH_FRAME", 2),
+  /** ストリームのビューポート上限(px)。実際は端末ヒントでこの範囲にクランプ */
+  streamMaxWidth: intEnv("STREAM_MAX_WIDTH", 1280),
+  streamMaxHeight: intEnv("STREAM_MAX_HEIGHT", 1280),
 } as const;
 
 export type AppConfig = typeof config;

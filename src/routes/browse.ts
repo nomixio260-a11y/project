@@ -10,8 +10,6 @@ import { safeFetch } from "../pipeline/fetcher.js";
 import { processHtml } from "../pipeline/htmlProcessor.js";
 import { needsRendering } from "../lib/spaDetect.js";
 import { renderPage, isRendererAvailable } from "../pipeline/renderer.js";
-import { openLiveSession } from "../pipeline/liveSession.js";
-import { sendLiveSnapshot } from "./liveResponse.js";
 import { isHtml } from "../lib/contentType.js";
 import { SsrfError } from "../security/ssrf.js";
 import { renderErrorPage } from "./errorPage.js";
@@ -23,10 +21,6 @@ interface BrowseQuery {
   dw?: number;
   dpr?: number;
   render?: RenderMode;
-  /** ライブ操作モード（常駐セッションでの対話表示） */
-  live?: string;
-  /** 再利用するライブセッションID（親シェルが現在sidを伝播） */
-  sid?: string;
 }
 
 const browseSchema = {
@@ -41,33 +35,17 @@ const browseSchema = {
       dpr: { type: "number", minimum: 1, maximum: 4 },
       // SPA描画モード: auto=ヒューリスティック検出 / on=強制 / off=無効
       render: { type: "string", enum: ["auto", "on", "off"] },
-      // ライブ操作モード（常駐セッションで対話表示）
-      live: { type: "string", enum: ["0", "1"] },
-      sid: { type: "string", pattern: "^[a-f0-9]{32}$" },
     },
   },
 };
 
 export async function registerBrowse(app: FastifyInstance): Promise<void> {
   app.get<{ Querystring: BrowseQuery }>("/browse", { schema: browseSchema }, async (req, reply) => {
-    const { url, dw, dpr, sid } = req.query;
+    const { url, dw, dpr } = req.query;
     const text = req.query.text === "1";
     const mode: RenderMode = req.query.render ?? "auto";
-    const live = req.query.live === "1";
 
     try {
-      // ライブ操作モード: 常駐セッションを開いて（または再利用して）対話表示。
-      // 失敗時は通常の取得/描画フローへフォールバックする。
-      if (live && config.enableLiveSessions && (await isRendererAvailable())) {
-        try {
-          const snap = await openLiveSession(url, { dw, dpr, sid });
-          return await sendLiveSnapshot(reply, snap, { text, dw, dpr });
-        } catch (err) {
-          if (err instanceof SsrfError) throw err;
-          req.log.warn({ err, url }, "live session failed, falling back to static/render");
-        }
-      }
-
       const result = await safeFetch(url, { maxBytes: config.maxHtmlBytes });
 
       if (!result.contentType || !isHtml(result.contentType)) {
