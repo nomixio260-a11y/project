@@ -2,6 +2,8 @@
 
 export type VideoCodec = "av1" | "vp9" | "h264";
 
+export type RenderMode = "auto" | "on" | "off";
+
 export interface RewriteOptions {
   /** テキスト優先モード（画像・動画を省略） */
   text: boolean;
@@ -9,6 +11,8 @@ export interface RewriteOptions {
   dw?: number;
   /** デバイスピクセル比(devicePixelRatio)。Retina等で適度に高解像度を許可 */
   dpr?: number;
+  /** SPAヘッドレス描画モード。リンクへ伝播してモードを維持する */
+  render?: RenderMode;
 }
 
 export interface FetchResult {

@@ -14,6 +14,7 @@
   var form = document.getElementById("nav");
   var address = document.getElementById("address");
   var textmode = document.getElementById("textmode");
+  var spamode = document.getElementById("spamode");
   var iframe = document.getElementById("page");
   var welcome = document.getElementById("welcome");
   var savingsEl = document.getElementById("savings");
@@ -45,6 +46,7 @@
     var u = "/browse?url=" + encodeURIComponent(targetUrl);
     if (textmode.checked) u += "&text=1";
     if (d.dw) u += "&dw=" + d.dw + "&dpr=" + d.dpr;
+    if (spamode.checked) u += "&render=on";
     return u;
   }
 
@@ -100,6 +102,11 @@
   });
 
   textmode.addEventListener("change", function () {
+    var cur = currentProxiedUrl();
+    if (cur) navigate(cur);
+  });
+
+  spamode.addEventListener("change", function () {
     var cur = currentProxiedUrl();
     if (cur) navigate(cur);
   });

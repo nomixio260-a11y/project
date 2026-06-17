@@ -27,6 +27,8 @@ export function toProxyUrl(absUrl: string, opts: RewriteOptions): string {
   // デバイスヒントを伝播し、iframe内ナビゲーションでも端末最適化を維持する
   if (opts.dw) params.set("dw", String(opts.dw));
   if (opts.dpr) params.set("dpr", String(opts.dpr));
+  // SPA描画モードを伝播（既定autoは省略してURLを簡潔に保つ）
+  if (opts.render && opts.render !== "auto") params.set("render", opts.render);
   return `/browse?${params.toString()}`;
 }
 

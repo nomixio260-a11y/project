@@ -23,7 +23,8 @@ beforeAll(async () => {
       `<!doctype html><html><head><title>Hi</title><script>track()</script></head>
        <body><h1>Hello</h1><a href="/next">next</a><img src="/p.jpg"></body></html>`,
       { headers: { "content-type": "text/html; charset=utf-8" } },
-    );
+    )
+    .persist();
 
   app = await buildServer();
   await app.ready();
@@ -61,5 +62,14 @@ describe("GET /browse", () => {
   it("rejects invalid (non-http) url with 400 via schema", async () => {
     const res = await app.inject({ method: "GET", url: "/browse?url=ftp://x" });
     expect(res.statusCode).toBe(400);
+  });
+
+  it("does not render when render=off (x-dsp-rendered: 0)", async () => {
+    const res = await app.inject({
+      method: "GET",
+      url: "/browse?url=" + encodeURIComponent("https://test.example/") + "&render=off",
+    });
+    expect(res.statusCode).toBe(200);
+    expect(res.headers["x-dsp-rendered"]).toBe("0");
   });
 });

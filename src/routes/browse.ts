@@ -8,15 +8,19 @@ import * as cheerio from "cheerio";
 import { config } from "../config.js";
 import { safeFetch } from "../pipeline/fetcher.js";
 import { processHtml } from "../pipeline/htmlProcessor.js";
+import { needsRendering } from "../lib/spaDetect.js";
+import { renderPage, isRendererAvailable } from "../pipeline/renderer.js";
 import { isHtml } from "../lib/contentType.js";
 import { SsrfError } from "../security/ssrf.js";
 import { renderErrorPage } from "./errorPage.js";
+import type { RenderMode } from "../types.js";
 
 interface BrowseQuery {
   url: string;
   text?: string;
   dw?: number;
   dpr?: number;
+  render?: RenderMode;
 }
 
 const browseSchema = {
@@ -29,6 +33,8 @@ const browseSchema = {
       // デバイス表示幅(px)とピクセル比。画像を端末サイズに合わせて縮小する
       dw: { type: "integer", minimum: 16, maximum: 4096 },
       dpr: { type: "number", minimum: 1, maximum: 4 },
+      // SPA描画モード: auto=ヒューリスティック検出 / on=強制 / off=無効
+      render: { type: "string", enum: ["auto", "on", "off"] },
     },
   },
 };
@@ -37,6 +43,7 @@ export async function registerBrowse(app: FastifyInstance): Promise<void> {
   app.get<{ Querystring: BrowseQuery }>("/browse", { schema: browseSchema }, async (req, reply) => {
     const { url, dw, dpr } = req.query;
     const text = req.query.text === "1";
+    const mode: RenderMode = req.query.render ?? "auto";
 
     try {
       const result = await safeFetch(url, { maxBytes: config.maxHtmlBytes });
@@ -49,14 +56,45 @@ export async function registerBrowse(app: FastifyInstance): Promise<void> {
         return reply.send(result.body);
       }
 
-      const html = decodeHtml(result.body, result.charset);
-      const processed = await processHtml(html, result.finalUrl, { text, dw, dpr });
+      const staticHtml = decodeHtml(result.body, result.charset);
+
+      // SPAレンダリング判定（on=強制 / auto=ヒューリスティック / off=無効）
+      let htmlToProcess = staticHtml;
+      let finalUrl = result.finalUrl;
+      let rendered = false;
+      let renderFallback = false;
+
+      const wantRender =
+        config.enableRenderer &&
+        mode !== "off" &&
+        (mode === "on" || needsRendering(staticHtml, result.contentType));
+
+      if (wantRender) {
+        if (await isRendererAvailable()) {
+          try {
+            // 描画は元URLから（リダイレクトSSRFをブラウザ経路でも再検証）
+            const r = await renderPage(url, { dw, dpr, maxBytes: config.maxHtmlBytes });
+            htmlToProcess = r.html;
+            finalUrl = r.finalUrl;
+            rendered = true;
+          } catch (err) {
+            req.log.warn({ err, url }, "render failed, falling back to static");
+            renderFallback = true;
+          }
+        } else {
+          renderFallback = true; // ブラウザ未導入等
+        }
+      }
+
+      const processed = await processHtml(htmlToProcess, finalUrl, { text, dw, dpr, render: mode });
 
       reply
         .header("content-type", "text/html; charset=utf-8")
         .header("x-content-type-options", "nosniff")
         .header("x-dsp-original-bytes", String(processed.originalBytes))
-        .header("x-dsp-processed-bytes", String(processed.processedBytes));
+        .header("x-dsp-processed-bytes", String(processed.processedBytes))
+        .header("x-dsp-rendered", rendered ? "1" : "0");
+      if (renderFallback) reply.header("x-dsp-render-fallback", "1");
       return reply.send(processed.html);
     } catch (err) {
       const status = err instanceof SsrfError ? 400 : 502;

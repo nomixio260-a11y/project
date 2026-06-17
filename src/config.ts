@@ -45,6 +45,20 @@ export const config = {
    * 公開トンネルでのオープンプロキシ濫用を防ぐ（未設定なら認証なし）。
    */
   accessToken: process.env.ACCESS_TOKEN ?? "",
+
+  /** SPA対応: ヘッドレスChromiumでJSを実行して描画する機能を有効化（既定ON）。
+   *  実際の可否は起動プローブ(isRendererAvailable)で最終判定し、未導入時は静的fetchへフォールバック。 */
+  enableRenderer: process.env.ENABLE_RENDERER !== "0",
+  /** 同時レンダリング数の上限（メモリ保護） */
+  maxConcurrentRenders: intEnv("MAX_CONCURRENT_RENDERS", 2),
+  /** レンダリング全体のタイムアウト（ミリ秒） */
+  renderTimeoutMs: intEnv("RENDER_TIMEOUT_MS", 15_000),
+  /** networkidle待ちの予算（ミリ秒）。これを超えても描画結果を採用する */
+  renderSettleMs: intEnv("RENDER_SETTLE_MS", 2_500),
+  /** レンダリング時に重いリソース（メディア/フォント/画像）をブロックして帯域節約（既定ON） */
+  renderBlockMedia: process.env.RENDER_BLOCK_MEDIA !== "0",
+  /** Chromiumを --no-sandbox で起動（コンテナ/root環境で必要。OSサンドボックスは弱まる） */
+  renderNoSandbox: process.env.RENDER_NO_SANDBOX === "1",
 } as const;
 
 export type AppConfig = typeof config;

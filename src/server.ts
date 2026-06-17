@@ -10,6 +10,7 @@ import { registerBrowse } from "./routes/browse.js";
 import { registerImage } from "./routes/image.js";
 import { registerVideo } from "./routes/video.js";
 import { registerAccessGuard } from "./security/accessGuard.js";
+import { closeBrowser } from "./pipeline/renderer.js";
 
 export async function buildServer(): Promise<FastifyInstance> {
   const app = Fastify({
@@ -40,6 +41,11 @@ export async function buildServer(): Promise<FastifyInstance> {
   await registerBrowse(app);
   await registerImage(app);
   await registerVideo(app);
+
+  // 共有ヘッドレスブラウザをクリーンに終了する
+  app.addHook("onClose", async () => {
+    await closeBrowser();
+  });
 
   return app;
 }
