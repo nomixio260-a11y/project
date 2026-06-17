@@ -21,6 +21,8 @@ interface BrowseQuery {
   dw?: number;
   dpr?: number;
   render?: RenderMode;
+  /** Opera Mini相当の省データ最大モード */
+  mini?: string;
 }
 
 const browseSchema = {
@@ -35,6 +37,8 @@ const browseSchema = {
       dpr: { type: "number", minimum: 1, maximum: 4 },
       // SPA描画モード: auto=ヒューリスティック検出 / on=強制 / off=無効
       render: { type: "string", enum: ["auto", "on", "off"] },
+      // 省データ最大(Opera Mini相当)
+      mini: { type: "string", enum: ["0", "1"] },
     },
   },
 };
@@ -43,7 +47,9 @@ export async function registerBrowse(app: FastifyInstance): Promise<void> {
   app.get<{ Querystring: BrowseQuery }>("/browse", { schema: browseSchema }, async (req, reply) => {
     const { url, dw, dpr } = req.query;
     const text = req.query.text === "1";
-    const mode: RenderMode = req.query.render ?? "auto";
+    const mini = req.query.mini === "1";
+    // 省データ最大では必ずサーバー側でJS実行→静的化する（Opera Mini方式）
+    const mode: RenderMode = mini ? "on" : (req.query.render ?? "auto");
 
     try {
       const result = await safeFetch(url, { maxBytes: config.maxHtmlBytes });
@@ -86,14 +92,21 @@ export async function registerBrowse(app: FastifyInstance): Promise<void> {
         }
       }
 
-      const processed = await processHtml(htmlToProcess, finalUrl, { text, dw, dpr, render: mode });
+      const processed = await processHtml(htmlToProcess, finalUrl, {
+        text,
+        dw,
+        dpr,
+        render: mode,
+        mini,
+      });
 
       reply
         .header("content-type", "text/html; charset=utf-8")
         .header("x-content-type-options", "nosniff")
         .header("x-dsp-original-bytes", String(processed.originalBytes))
         .header("x-dsp-processed-bytes", String(processed.processedBytes))
-        .header("x-dsp-rendered", rendered ? "1" : "0");
+        .header("x-dsp-rendered", rendered ? "1" : "0")
+        .header("x-dsp-mini", mini ? "1" : "0");
       if (renderFallback) reply.header("x-dsp-render-fallback", "1");
       return reply.send(processed.html);
     } catch (err) {

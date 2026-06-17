@@ -29,6 +29,8 @@ export function toProxyUrl(absUrl: string, opts: RewriteOptions): string {
   if (opts.dpr) params.set("dpr", String(opts.dpr));
   // SPA描画モードを伝播（既定autoは省略してURLを簡潔に保つ）
   if (opts.render && opts.render !== "auto") params.set("render", opts.render);
+  // 省データ最大モードを伝播（リンク先でも維持）
+  if (opts.mini) params.set("mini", "1");
   return `/browse?${params.toString()}`;
 }
 

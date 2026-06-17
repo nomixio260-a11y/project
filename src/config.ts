@@ -60,20 +60,10 @@ export const config = {
   /** Chromiumを --no-sandbox で起動（コンテナ/root環境で必要。OSサンドボックスは弱まる） */
   renderNoSandbox: process.env.RENDER_NO_SANDBOX === "1",
 
-  /** ライブ操作モード（サーバー側の常駐ページを保持し、画面を映像フレーム
-   *  （CDPスクリーンキャスト）として配信し、クリック/入力を送り返す“リモートブラウザ”）。
-   *  ピクセル映像を流すため通信量は大きいが、動画再生を含む完全な操作が可能。 */
-  enableLiveSessions: process.env.ENABLE_LIVE_SESSIONS !== "0",
-  /** 同時に張れる映像ストリーム（リモートブラウザ）の最大数。CPU/メモリ保護 */
-  maxLiveSessions: intEnv("MAX_LIVE_SESSIONS", 4),
-
-  /** スクリーンキャストのJPEG品質(0-100)。下げるほど省データ */
-  streamQuality: intEnv("STREAM_QUALITY", 55),
-  /** Nフレームに1枚だけ送る（フレーム間引き）。大きいほど省データ・低fps */
-  streamEveryNthFrame: intEnv("STREAM_EVERY_NTH_FRAME", 2),
-  /** ストリームのビューポート上限(px)。実際は端末ヒントでこの範囲にクランプ */
-  streamMaxWidth: intEnv("STREAM_MAX_WIDTH", 1280),
-  streamMaxHeight: intEnv("STREAM_MAX_HEIGHT", 1280),
+  /** Opera Mini相当の「省データ最大」モードの圧縮パラメータ。
+   *  サーバーでJS実行→静的化した上で、画像を強圧縮・Webフォント等を全除去して極限まで削る。 */
+  miniImageWidth: intEnv("MINI_IMAGE_WIDTH", 400),
+  miniImageQuality: intEnv("MINI_IMAGE_QUALITY", 35),
 } as const;
 
 export type AppConfig = typeof config;

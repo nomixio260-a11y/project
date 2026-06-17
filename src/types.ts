@@ -13,6 +13,8 @@ export interface RewriteOptions {
   dpr?: number;
   /** SPAヘッドレス描画モード。リンクへ伝播してモードを維持する */
   render?: RenderMode;
+  /** Opera Mini相当の「省データ最大」モード。画像強圧縮・Webフォント等を全除去 */
+  mini?: boolean;
 }
 
 export interface FetchResult {

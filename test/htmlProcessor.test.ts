@@ -97,3 +97,39 @@ describe("processHtml (text mode)", () => {
     expect(html).toContain("text=1");
   });
 });
+
+describe("processHtml (Opera Mini相当の省データ最大モード)", () => {
+  it("re-compresses images harder (small width + low quality) and propagates mini on links", async () => {
+    const input = `<html><body><img src="/pic.jpg"><a href="/next">n</a></body></html>`;
+    const { html } = await processHtml(input, BASE, { text: false, mini: true });
+    // 画像は幅400・品質35で /img 経由に（強圧縮）
+    expect(html).toContain("/img?url=https%3A%2F%2Fexample.com%2Fpic.jpg");
+    expect(html).toMatch(/w=400/);
+    expect(html).toMatch(/q=35/);
+    // miniフラグはリンクへ伝播してモード維持
+    expect(html).toContain("mini=1");
+  });
+
+  it("strips web fonts and background images to cut decorative traffic", async () => {
+    const input = `<html><head>
+      <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Roboto">
+      <link rel="preload" as="font" href="/f.woff2">
+      <style>@font-face{font-family:x;src:url(/x.woff2)} body{color:#000}</style>
+      </head><body>
+      <div style="background-image:url(/bg.jpg);color:red">hi</div>
+      </body></html>`;
+    const { html } = await processHtml(input, BASE, { text: false, mini: true });
+    expect(html).not.toContain("fonts.googleapis.com");
+    expect(html).not.toContain("as=\"font\"");
+    expect(html).not.toContain("@font-face");
+    expect(html).not.toContain("bg.jpg");
+    // 装飾以外の宣言は残す
+    expect(html).toContain("color:red");
+  });
+
+  it("normal mode keeps default image width/quality (not the mini values)", async () => {
+    const input = `<html><body><img src="/pic.jpg"></body></html>`;
+    const { html } = await processHtml(input, BASE, { text: false });
+    expect(html).not.toMatch(/w=400&q=35/);
+  });
+});

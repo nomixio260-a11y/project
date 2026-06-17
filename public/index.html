@@ -47,9 +47,9 @@
           <input id="spamode" type="checkbox" />
           SPA表示
         </label>
-        <label class="text-toggle" title="サーバー側ブラウザの画面を映像で配信し、クリック/入力/動画再生まで完全に操作（リモートブラウザ）">
-          <input id="livemode" type="checkbox" />
-          操作モード
+        <label class="text-toggle" title="Opera Mini方式: サーバーでJS実行・広告除去・画像強圧縮・Webフォント除去まで行い、極限まで軽量化したページだけを受信">
+          <input id="minimode" type="checkbox" />
+          省データ最大
         </label>
         <span id="savings" class="savings" hidden></span>
       </div>
@@ -57,11 +57,6 @@
     <div id="progress" class="progress" hidden><span class="bar"></span></div>
     <main class="viewport">
       <iframe id="page" title="ページ表示" referrerpolicy="no-referrer"></iframe>
-      <!-- 映像ストリーミング（リモートブラウザ）表示面。操作モード時のみ表示 -->
-      <div id="stream" class="stream" tabindex="0" hidden>
-        <img id="screen" alt="リモートブラウザ画面" draggable="false" />
-        <div id="streamStatus" class="stream-status">接続中…</div>
-      </div>
       <div id="welcome" class="welcome">
         <img class="welcome-logo" src="/public/icon.svg" alt="" width="56" height="56" />
         <h1>DataSaver Browser</h1>
@@ -75,7 +70,6 @@
         <p class="hint">スマホ・タブレット・PCに対応。ホーム画面に追加してアプリのように使えます。</p>
       </div>
     </main>
-    <script src="/public/stream.js"></script>
     <script src="/public/app.js"></script>
   </body>
 </html>

@@ -15,7 +15,7 @@
   var address = document.getElementById("address");
   var textmode = document.getElementById("textmode");
   var spamode = document.getElementById("spamode");
-  var livemode = document.getElementById("livemode");
+  var minimode = document.getElementById("minimode");
   var iframe = document.getElementById("page");
   var welcome = document.getElementById("welcome");
   var savingsEl = document.getElementById("savings");
@@ -47,34 +47,10 @@
     var u = "/browse?url=" + encodeURIComponent(targetUrl);
     if (textmode.checked) u += "&text=1";
     if (d.dw) u += "&dw=" + d.dw + "&dpr=" + d.dpr;
-    if (spamode.checked) u += "&render=on";
+    // 省データ最大(Opera Mini相当)はサーバー側で描画＋強圧縮まで行う
+    if (minimode.checked) u += "&mini=1";
+    else if (spamode.checked) u += "&render=on";
     return u;
-  }
-
-  // ===== 操作モード（映像ストリーミング＝リモートブラウザ）の状態 =====
-  var streamUrl = null; // ストリーミング中の実URL
-
-  // サーバーがURL変化（SPA内遷移含む）を通知 → アドレスバー同期
-  if (window.DSPStream) {
-    window.DSPStream.onUrl(function (u) {
-      streamUrl = u;
-      address.value = u;
-    });
-  }
-
-  /** 操作モードでURLを開く（既存ストリームがあれば同一セッションのまま遷移） */
-  function streamOpen(targetUrl) {
-    if (!/^https?:\/\//i.test(targetUrl)) targetUrl = "https://" + targetUrl;
-    welcome.style.display = "none";
-    iframe.style.display = "none";
-    streamUrl = targetUrl;
-    address.value = targetUrl;
-    var d = deviceHints();
-    if (window.DSPStream.isActive()) {
-      window.DSPStream.navigate(targetUrl);
-    } else {
-      window.DSPStream.open(targetUrl, { dw: d.dw, dpr: d.dpr });
-    }
   }
 
   // ===== 独自履歴（戻る・進む） =====
@@ -90,11 +66,6 @@
 
   function navigate(targetUrl) {
     if (!targetUrl) return;
-    // 操作モードは映像ストリーミング、それ以外はプロキシ済みiframe表示
-    if (livemode.checked) {
-      streamOpen(targetUrl);
-      return;
-    }
     load(buildBrowseUrl(targetUrl));
   }
 
@@ -127,10 +98,6 @@
   });
 
   reloadBtn.addEventListener("click", function () {
-    if (livemode.checked && window.DSPStream.isActive() && streamUrl) {
-      window.DSPStream.navigate(streamUrl);
-      return;
-    }
     if (pos >= 0) {
       suppressPush = true;
       load(stack[pos]);
@@ -147,18 +114,11 @@
     if (cur) navigate(cur);
   });
 
-  livemode.addEventListener("change", function () {
-    if (livemode.checked) {
-      // 操作モードON: 現在のページを映像ストリーミングで開き直す
-      var cur = currentProxiedUrl() || streamUrl || address.value.trim();
-      if (cur) streamOpen(cur);
-    } else {
-      // 操作モードOFF: ストリームを閉じ、通常のプロキシ表示へ戻す
-      var u = streamUrl;
-      window.DSPStream.close();
-      iframe.style.display = "";
-      if (u) navigate(u);
-    }
+  minimode.addEventListener("change", function () {
+    // 省データ最大とSPA表示は排他（miniは描画も内包するため）
+    if (minimode.checked) spamode.checked = false;
+    var cur = currentProxiedUrl() || address.value.trim();
+    if (cur) navigate(cur);
   });
 
   /** iframeの現在URL(/browse?url=...)から元URLを取り出す */

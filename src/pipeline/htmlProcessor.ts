@@ -14,6 +14,7 @@ import {
   effectiveImageWidth,
 } from "./urlRewriter.js";
 import { processCss } from "./cssProcessor.js";
+import { config } from "../config.js";
 import type { ProcessedHtml, RewriteOptions } from "../types.js";
 
 const PLAY_ICON =
@@ -106,9 +107,19 @@ export async function processHtml(
       e.attr("style", style.replace(/background(-image)?\s*:[^;]*;?/gi, ""));
     });
   } else {
-    rewriteImages($, base, effectiveImageWidth(opts));
+    // 省データ最大(Opera Mini相当)では画像をより小さく・低品質に再圧縮する
+    const imgWidth = opts.mini
+      ? Math.min(config.miniImageWidth, effectiveImageWidth(opts))
+      : effectiveImageWidth(opts);
+    const imgQuality = opts.mini ? config.miniImageQuality : undefined;
+    rewriteImages($, base, imgWidth, imgQuality);
     rewriteVideos($, base);
     rewriteEmbeds($, base);
+  }
+
+  // 省データ最大: Webフォント・投機読み込み・背景画像など「見た目用の重い通信」を全除去
+  if (opts.mini) {
+    stripHeavyForMini($);
   }
 
   // 6) スタイルシート処理（<style> 最小化、<link> はインライン化せず最適化のみ）
@@ -160,7 +171,12 @@ export async function processHtml(
 }
 
 /** <img> と srcset を /img 経由に書き換え（width はデバイスに合わせる） */
-function rewriteImages($: cheerio.CheerioAPI, base: string, imgWidth: number): void {
+function rewriteImages(
+  $: cheerio.CheerioAPI,
+  base: string,
+  imgWidth: number,
+  imgQuality?: number,
+): void {
   $("img").each((_, el) => {
     const e = $(el);
     // lazy-load属性を実体化
@@ -168,7 +184,7 @@ function rewriteImages($: cheerio.CheerioAPI, base: string, imgWidth: number): v
     const src = e.attr("src") ?? lazySrc;
     if (src) {
       const abs = toAbsolute(src, base);
-      if (abs) e.attr("src", toImageUrl(abs, { w: imgWidth }));
+      if (abs) e.attr("src", toImageUrl(abs, { w: imgWidth, q: imgQuality }));
       else e.removeAttr("src");
     }
     e.removeAttr("data-src").removeAttr("data-original").removeAttr("data-lazy-src");
@@ -235,6 +251,32 @@ function rewriteEmbeds($: cheerio.CheerioAPI, base: string): void {
       // 非動画iframeは絶対化のみ（広告系は既に除去済み）
       e.attr("src", abs);
     }
+  });
+}
+
+/**
+ * 省データ最大(Opera Mini相当)で「見た目のための重い通信」を除去する。
+ * Webフォント（数百KB級）をシステムフォントに置換し、背景画像の読み込みも止める。
+ */
+function stripHeavyForMini($: cheerio.CheerioAPI): void {
+  // Webフォントの読み込みを除去（フォントは最も無駄になりやすい通信のひとつ）
+  $("link[rel='preload'][as='font']").remove();
+  $(
+    "link[href*='fonts.googleapis.com'],link[href*='fonts.gstatic.com'],link[href*='use.typekit.net'],link[href*='fontawesome']",
+  ).remove();
+  // インライン<style>内の @font-face を除去（外部CSSは据え置くが web font は読まれにくくなる）
+  $("style").each((_, el) => {
+    const e = $(el);
+    const css = e.html() ?? "";
+    const cleaned = css.replace(/@font-face\s*\{[^}]*\}/gi, "");
+    if (cleaned !== css) e.html(cleaned);
+  });
+  // インラインstyleの背景画像URLを除去（装飾画像の通信を削減）
+  $("[style]").each((_, el) => {
+    const e = $(el);
+    const style = e.attr("style") ?? "";
+    const cleaned = style.replace(/background(-image)?\s*:[^;]*url\([^)]*\)[^;]*;?/gi, "");
+    if (cleaned !== style) e.attr("style", cleaned);
   });
 }
 

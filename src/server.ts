@@ -4,16 +4,13 @@
 import Fastify, { type FastifyInstance } from "fastify";
 import compress from "@fastify/compress";
 import rateLimit from "@fastify/rate-limit";
-import websocket from "@fastify/websocket";
 import { config } from "./config.js";
 import { registerUi } from "./routes/ui.js";
 import { registerBrowse } from "./routes/browse.js";
-import { registerStream } from "./routes/stream.js";
 import { registerImage } from "./routes/image.js";
 import { registerVideo } from "./routes/video.js";
 import { registerAccessGuard } from "./security/accessGuard.js";
 import { closeBrowser } from "./pipeline/renderer.js";
-import { closeAllStreams } from "./routes/stream.js";
 
 export async function buildServer(): Promise<FastifyInstance> {
   const app = Fastify({
@@ -35,11 +32,6 @@ export async function buildServer(): Promise<FastifyInstance> {
     timeWindow: "1 minute",
   });
 
-  // 映像ストリーミング（リモートブラウザ）用のWebSocket
-  await app.register(websocket, {
-    options: { maxPayload: 1024 * 1024 },
-  });
-
   // アクセストークン認証（ACCESS_TOKEN設定時のみ。公開トンネルの保護用）
   registerAccessGuard(app);
 
@@ -47,13 +39,11 @@ export async function buildServer(): Promise<FastifyInstance> {
 
   await registerUi(app);
   await registerBrowse(app);
-  await registerStream(app);
   await registerImage(app);
   await registerVideo(app);
 
-  // 稼働中の映像ストリームと共有ヘッドレスブラウザをクリーンに終了する
+  // 共有ヘッドレスブラウザをクリーンに終了する
   app.addHook("onClose", async () => {
-    await closeAllStreams();
     await closeBrowser();
   });
 
