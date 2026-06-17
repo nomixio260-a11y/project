@@ -4,9 +4,13 @@
 import sharp from "sharp";
 import { config } from "../config.js";
 
+export type ImageFormat = "webp" | "avif";
+
 export interface OptimizeImageOptions {
   width: number;
   quality: number;
+  /** 出力フォーマット。avifはwebpよりさらに小さい（既定webp） */
+  format?: ImageFormat;
 }
 
 export interface OptimizedImage {
@@ -15,7 +19,7 @@ export interface OptimizedImage {
 }
 
 /**
- * 入力画像バッファを width 上限でリサイズし、WebPへ変換する。
+ * 入力画像バッファを width 上限でリサイズし、WebP/AVIFへ変換する。
  * SVGはベクタなのでそのまま返す（ラスタ化しない）。
  */
 export async function optimizeImage(
@@ -30,6 +34,7 @@ export async function optimizeImage(
 
   const width = clamp(Math.round(opts.width), 16, config.imageMaxWidth);
   const quality = clamp(Math.round(opts.quality), 10, 90);
+  const format: ImageFormat = opts.format === "avif" ? "avif" : "webp";
 
   const pipeline = sharp(input, {
     limitInputPixels: 64_000_000, // ~8000x8000、解凍爆弾対策
@@ -43,6 +48,11 @@ export async function optimizeImage(
     withoutEnlargement: true,
   });
 
+  // AVIFはwebpより高圧縮（同品質で2〜3割小さい）。エンコードは重いので effort は控えめ。
+  if (format === "avif") {
+    const data = await resized.avif({ quality, effort: 3 }).toBuffer();
+    return { data, contentType: "image/avif" };
+  }
   const data = await resized.webp({ quality, effort: 4 }).toBuffer();
   return { data, contentType: "image/webp" };
 }

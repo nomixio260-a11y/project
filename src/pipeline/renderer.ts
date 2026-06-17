@@ -130,6 +130,8 @@ export async function newGuardedContext(
     serviceWorkers: "block",
     acceptDownloads: false,
     javaScriptEnabled: true,
+    // TLS傍受プロキシ環境でもHTTPSを開けるように（SSRF検証は別途 context.route で実施）
+    ignoreHTTPSErrors: config.renderIgnoreHttpsErrors,
   });
   await installGuardRoute(context);
   return context;

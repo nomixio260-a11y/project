@@ -1,6 +1,7 @@
 /**
  * Fastifyアプリの生成。プラグイン（圧縮・レート制限）とルートを登録する。
  */
+import zlib from "node:zlib";
 import Fastify, { type FastifyInstance } from "fastify";
 import compress from "@fastify/compress";
 import rateLimit from "@fastify/rate-limit";
@@ -23,8 +24,15 @@ export async function buildServer(): Promise<FastifyInstance> {
   await app.register(compress, {
     global: true,
     encodings: ["br", "gzip"],
-    // 既に圧縮済みのバイナリ（webp/動画）は再圧縮しない
+    // 既に圧縮済みのバイナリ（webp/avif/動画）は再圧縮しない
     customTypes: /^(text\/|application\/(json|javascript|xml)|image\/svg)/,
+    // 通信量を最優先するデータセーバーなのでBrotliは最高圧縮率(11)に固定
+    brotliOptions: {
+      params: {
+        [zlib.constants.BROTLI_PARAM_QUALITY]: 11,
+      },
+    },
+    zlibOptions: { level: 9 },
   });
 
   await app.register(rateLimit, {

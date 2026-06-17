@@ -44,4 +44,20 @@ describe("optimizeImage", () => {
     const out = await optimizeImage(big, { width: 800, quality: 50 });
     expect(out.data.length).toBeLessThan(big.length);
   });
+
+  it("emits AVIF when requested", async () => {
+    const photo = await sharp({
+      create: { width: 1200, height: 800, channels: 3, background: { r: 200, g: 150, b: 90 } },
+    })
+      .png()
+      .toBuffer();
+    const webp = await optimizeImage(photo, { width: 400, quality: 35, format: "webp" });
+    const avif = await optimizeImage(photo, { width: 400, quality: 35, format: "avif" });
+    expect(webp.contentType).toBe("image/webp");
+    expect(avif.contentType).toBe("image/avif");
+    expect((await sharp(avif.data).metadata()).format).toBe("heif"); // avif container
+    // どちらも元より大幅に小さい（高圧縮）
+    expect(avif.data.length).toBeLessThan(photo.length);
+    expect(webp.data.length).toBeLessThan(photo.length);
+  });
 });

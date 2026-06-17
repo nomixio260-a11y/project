@@ -23,6 +23,7 @@
         <button id="back" class="iconbtn" type="button" title="戻る" aria-label="戻る" disabled>‹</button>
         <button id="forward" class="iconbtn" type="button" title="進む" aria-label="進む" disabled>›</button>
         <button id="reload" class="iconbtn" type="button" title="再読み込み" aria-label="再読み込み">⟳</button>
+        <button id="home" class="iconbtn" type="button" title="ホーム" aria-label="ホーム">⌂</button>
       </div>
       <form id="nav" class="nav">
         <input
@@ -31,13 +32,15 @@
           type="text"
           inputmode="url"
           enterkeyhint="go"
-          placeholder="URLを入力（例: https://example.com）"
+          placeholder="URLを入力 または 検索"
           autocomplete="off"
           autocapitalize="off"
           spellcheck="false"
         />
+        <button id="bookmark" class="iconbtn star" type="button" title="ブックマーク" aria-label="ブックマーク">☆</button>
         <button id="go" type="submit" class="go">移動</button>
       </form>
+      <button id="menuBtn" class="iconbtn" type="button" title="メニュー" aria-label="メニュー" aria-expanded="false">☰</button>
       <div class="opts">
         <label class="text-toggle">
           <input id="textmode" type="checkbox" />
@@ -54,6 +57,33 @@
         <span id="savings" class="savings" hidden></span>
       </div>
     </header>
+
+    <!-- ページ内検索バー -->
+    <div id="findbar" class="findbar" hidden>
+      <input id="findInput" class="address" type="text" placeholder="ページ内を検索" enterkeyhint="search" />
+      <button id="findPrev" class="iconbtn" type="button" title="前へ">‹</button>
+      <button id="findNext" class="iconbtn" type="button" title="次へ">›</button>
+      <button id="findClose" class="iconbtn" type="button" title="閉じる">✕</button>
+    </div>
+
+    <!-- メニュー（ブックマーク／履歴／操作） -->
+    <div id="menu" class="menu" hidden>
+      <div class="menu-actions">
+        <button id="mFind" type="button">🔍 ページ内検索</button>
+        <button id="mShare" type="button">↗ 共有</button>
+        <button id="mClear" type="button">🗑 履歴を消去</button>
+      </div>
+      <section class="menu-sec">
+        <h3>ブックマーク</h3>
+        <ul id="bmList" class="menu-list"><li class="menu-empty">なし</li></ul>
+      </section>
+      <section class="menu-sec">
+        <h3>履歴</h3>
+        <ul id="histList" class="menu-list"><li class="menu-empty">なし</li></ul>
+      </section>
+    </div>
+    <div id="scrim" class="scrim" hidden></div>
+
     <div id="progress" class="progress" hidden><span class="bar"></span></div>
     <main class="viewport">
       <iframe id="page" title="ページ表示" referrerpolicy="no-referrer"></iframe>
@@ -62,12 +92,16 @@
         <h1>DataSaver Browser</h1>
         <p>URLを入力すると、サーバー側でページを取得・圧縮して表示します。</p>
         <ul>
-          <li>画像はWebPへ再圧縮し、<strong>お使いの端末の画面幅に合わせて縮小</strong></li>
+          <li>画像は<strong>WebP/AVIF</strong>へ再圧縮し、端末の画面幅に合わせて縮小</li>
           <li>広告・スクリプト・トラッカーを除去</li>
           <li>動画は高効率コーデック(AV1/VP9)へ再エンコード</li>
-          <li>HTML/CSSを最小化し、Brotliで圧縮配信</li>
+          <li>HTML/CSSを最小化し、<strong>Brotli(最高圧縮)</strong>で配信</li>
+          <li><strong>省データ最大(Opera Mini方式)</strong>でさらに極限まで軽量化</li>
         </ul>
-        <p class="hint">スマホ・タブレット・PCに対応。ホーム画面に追加してアプリのように使えます。</p>
+        <p class="hint">
+          URLでも検索でも入力OK。☆でブックマーク、☰で履歴・ページ内検索・共有。
+          スマホ・タブレット・PC対応、ホーム画面に追加してアプリのように使えます。
+        </p>
       </div>
     </main>
     <script src="/public/app.js"></script>

@@ -59,6 +59,10 @@ export const config = {
   renderBlockMedia: process.env.RENDER_BLOCK_MEDIA !== "0",
   /** Chromiumを --no-sandbox で起動（コンテナ/root環境で必要。OSサンドボックスは弱まる） */
   renderNoSandbox: process.env.RENDER_NO_SANDBOX === "1",
+  /** ヘッドレスブラウザでTLS証明書エラーを無視する（既定ON）。
+   *  企業/クラウドのTLS傍受プロキシ経由だとChromiumが独自CAを信頼せず ERR_CERT_AUTHORITY_INVALID で
+   *  HTTPSが開けないため。undiciの静的取得は別途システムCA/NODE_EXTRA_CA_CERTSで検証される。 */
+  renderIgnoreHttpsErrors: process.env.RENDER_IGNORE_HTTPS_ERRORS !== "0",
 
   /** Opera Mini相当の「省データ最大」モードの圧縮パラメータ。
    *  サーバーでJS実行→静的化した上で、画像を強圧縮・Webフォント等を全除去して極限まで削る。 */

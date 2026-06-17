@@ -22,7 +22,32 @@
   var backBtn = document.getElementById("back");
   var fwdBtn = document.getElementById("forward");
   var reloadBtn = document.getElementById("reload");
+  var homeBtn = document.getElementById("home");
+  var bookmarkBtn = document.getElementById("bookmark");
+  var menuBtn = document.getElementById("menuBtn");
+  var menu = document.getElementById("menu");
+  var scrim = document.getElementById("scrim");
+  var bmList = document.getElementById("bmList");
+  var histList = document.getElementById("histList");
+  var findbar = document.getElementById("findbar");
+  var findInput = document.getElementById("findInput");
   var progress = document.getElementById("progress");
+
+  // ===== 永続化（localStorage） =====
+  var LS = window.localStorage;
+  function lsGet(key, fallback) {
+    try {
+      var v = LS.getItem(key);
+      return v == null ? fallback : JSON.parse(v);
+    } catch (e) {
+      return fallback;
+    }
+  }
+  function lsSet(key, val) {
+    try {
+      LS.setItem(key, JSON.stringify(val));
+    } catch (e) {}
+  }
 
   /** クライアントが再生可能な最良コーデックを判定（AV1 → VP9 → H.264） */
   function bestCodec() {
@@ -38,6 +63,21 @@
     var dw = Math.round(document.documentElement.clientWidth || window.innerWidth || 0);
     var dpr = window.devicePixelRatio || 1;
     return { dw: dw, dpr: Math.round(dpr * 100) / 100 };
+  }
+
+  /**
+   * アドレスバー入力をURLか検索クエリに解決する。
+   * スキーム付き or "ドット有り＆空白なし"（example.com 等）はURL扱い、
+   * それ以外は検索エンジンへ（既定DuckDuckGo）。
+   */
+  function toTarget(input) {
+    var s = (input || "").trim();
+    if (!s) return null;
+    if (/^https?:\/\//i.test(s)) return s;
+    if (/^[^\s.]+\.[^\s]{2,}($|\/|\?|#|:)/.test(s) || /^localhost(:|\/|$)/.test(s)) {
+      return "https://" + s;
+    }
+    return "https://duckduckgo.com/?q=" + encodeURIComponent(s);
   }
 
   /** 元URL+モードから /browse パスを組み立てる（デバイスヒントを付与） */
@@ -69,6 +109,20 @@
     load(buildBrowseUrl(targetUrl));
   }
 
+  /** アドレスバー/検索からの遷移（URL or 検索クエリ） */
+  function go(input) {
+    var t = toTarget(input);
+    if (t) navigate(t);
+  }
+
+  function goHome() {
+    iframe.src = "about:blank";
+    welcome.style.display = "";
+    address.value = "";
+    setBookmarkState(null);
+    stopLoading();
+  }
+
   function updateNavButtons() {
     backBtn.disabled = pos <= 0;
     fwdBtn.disabled = pos >= stack.length - 1;
@@ -76,8 +130,10 @@
 
   form.addEventListener("submit", function (e) {
     e.preventDefault();
-    navigate(address.value.trim());
+    go(address.value);
   });
+
+  homeBtn.addEventListener("click", goHome);
 
   backBtn.addEventListener("click", function () {
     if (pos > 0) {
@@ -98,18 +154,36 @@
   });
 
   reloadBtn.addEventListener("click", function () {
+    if (loading) {
+      // 読み込み中は停止ボタンとして機能
+      try {
+        iframe.contentWindow.stop();
+      } catch (e) {}
+      stopLoading();
+      return;
+    }
     if (pos >= 0) {
       suppressPush = true;
       load(stack[pos]);
     }
   });
 
+  function saveSettings() {
+    lsSet("dsp_settings", {
+      text: textmode.checked,
+      spa: spamode.checked,
+      mini: minimode.checked,
+    });
+  }
+
   textmode.addEventListener("change", function () {
+    saveSettings();
     var cur = currentProxiedUrl();
     if (cur) navigate(cur);
   });
 
   spamode.addEventListener("change", function () {
+    saveSettings();
     var cur = currentProxiedUrl();
     if (cur) navigate(cur);
   });
@@ -117,6 +191,7 @@
   minimode.addEventListener("change", function () {
     // 省データ最大とSPA表示は排他（miniは描画も内包するため）
     if (minimode.checked) spamode.checked = false;
+    saveSettings();
     var cur = currentProxiedUrl() || address.value.trim();
     if (cur) navigate(cur);
   });
@@ -142,12 +217,19 @@
     }
   }
 
-  // ===== ローディング表示 =====
+  // ===== ローディング表示（再読込ボタンは読み込み中だけ「停止」に変わる） =====
+  var loading = false;
   function startLoading() {
+    loading = true;
     progress.hidden = false;
+    reloadBtn.textContent = "✕";
+    reloadBtn.title = "停止";
   }
   function stopLoading() {
+    loading = false;
     progress.hidden = true;
+    reloadBtn.textContent = "⟳";
+    reloadBtn.title = "再読み込み";
   }
 
   iframe.addEventListener("load", function () {
@@ -174,9 +256,17 @@
     }
     updateNavButtons();
 
-    // アドレスバーを実URLに同期
+    // アドレスバーを実URLに同期、履歴記録、ブックマーク状態更新
     var cur = currentProxiedUrl();
-    if (cur) address.value = cur;
+    if (cur) {
+      address.value = cur;
+      var title = "";
+      try {
+        title = (doc.title || "").trim();
+      } catch (e) {}
+      recordHistory(cur, title);
+      setBookmarkState(cur);
+    }
 
     enhanceVideos(doc);
     enhanceEmbeds(doc);
@@ -303,4 +393,193 @@
   function kb(n) {
     return Math.round(n / 1024) + "KB";
   }
+
+  // ===== ブックマーク =====
+  function getBookmarks() {
+    return lsGet("dsp_bookmarks", []);
+  }
+  function isBookmarked(url) {
+    return getBookmarks().some(function (b) {
+      return b.url === url;
+    });
+  }
+  function setBookmarkState(url) {
+    var on = url && isBookmarked(url);
+    bookmarkBtn.textContent = on ? "★" : "☆";
+    bookmarkBtn.classList.toggle("on", !!on);
+  }
+  function toggleBookmark() {
+    var url = currentProxiedUrl();
+    if (!url) return;
+    var list = getBookmarks();
+    var idx = list.findIndex(function (b) {
+      return b.url === url;
+    });
+    if (idx >= 0) {
+      list.splice(idx, 1);
+    } else {
+      var title = "";
+      try {
+        title = (iframe.contentDocument.title || "").trim();
+      } catch (e) {}
+      list.unshift({ url: url, title: title || url });
+    }
+    lsSet("dsp_bookmarks", list);
+    setBookmarkState(url);
+    renderBookmarks();
+  }
+  bookmarkBtn.addEventListener("click", toggleBookmark);
+
+  // ===== 履歴 =====
+  function recordHistory(url, title) {
+    var list = lsGet("dsp_history", []);
+    // 直近と同じURLは重複追加しない
+    if (list.length && list[0].url === url) {
+      if (title) list[0].title = title;
+    } else {
+      list.unshift({ url: url, title: title || url, ts: Date.now() });
+      list = list.slice(0, 200);
+    }
+    lsSet("dsp_history", list);
+  }
+
+  // ===== メニュー（ブックマーク／履歴の描画） =====
+  function renderList(ul, items, onDelete) {
+    ul.textContent = "";
+    if (!items.length) {
+      var li = document.createElement("li");
+      li.className = "menu-empty";
+      li.textContent = "なし";
+      ul.appendChild(li);
+      return;
+    }
+    items.forEach(function (it, i) {
+      var li = document.createElement("li");
+      var a = document.createElement("span");
+      a.className = "ml-link";
+      a.textContent = it.title || it.url;
+      a.title = it.url;
+      a.addEventListener("click", function () {
+        closeMenu();
+        navigate(it.url);
+      });
+      li.appendChild(a);
+      var del = document.createElement("button");
+      del.className = "ml-del";
+      del.textContent = "✕";
+      del.title = "削除";
+      del.addEventListener("click", function (e) {
+        e.stopPropagation();
+        onDelete(i);
+      });
+      li.appendChild(del);
+      ul.appendChild(li);
+    });
+  }
+  function renderBookmarks() {
+    renderList(bmList, getBookmarks(), function (i) {
+      var list = getBookmarks();
+      list.splice(i, 1);
+      lsSet("dsp_bookmarks", list);
+      renderBookmarks();
+      setBookmarkState(currentProxiedUrl());
+    });
+  }
+  function renderHistory() {
+    renderList(histList, lsGet("dsp_history", []), function (i) {
+      var list = lsGet("dsp_history", []);
+      list.splice(i, 1);
+      lsSet("dsp_history", list);
+      renderHistory();
+    });
+  }
+
+  function openMenu() {
+    renderBookmarks();
+    renderHistory();
+    menu.hidden = false;
+    scrim.hidden = false;
+    menuBtn.setAttribute("aria-expanded", "true");
+  }
+  function closeMenu() {
+    menu.hidden = true;
+    scrim.hidden = true;
+    menuBtn.setAttribute("aria-expanded", "false");
+  }
+  menuBtn.addEventListener("click", function () {
+    if (menu.hidden) openMenu();
+    else closeMenu();
+  });
+  scrim.addEventListener("click", closeMenu);
+  document.getElementById("mClear").addEventListener("click", function () {
+    lsSet("dsp_history", []);
+    renderHistory();
+  });
+  document.getElementById("mShare").addEventListener("click", function () {
+    var url = currentProxiedUrl();
+    if (!url) return;
+    closeMenu();
+    if (navigator.share) navigator.share({ url: url }).catch(function () {});
+    else if (navigator.clipboard) {
+      navigator.clipboard.writeText(url);
+      alert("URLをコピーしました");
+    }
+  });
+  document.getElementById("mFind").addEventListener("click", function () {
+    closeMenu();
+    openFind();
+  });
+
+  // ===== ページ内検索 =====
+  function openFind() {
+    findbar.hidden = false;
+    findInput.value = "";
+    findInput.focus();
+  }
+  function closeFind() {
+    findbar.hidden = true;
+  }
+  function findInPage(forward) {
+    var q = findInput.value;
+    if (!q) return;
+    try {
+      // window.find は非標準だが主要ブラウザで利用可。同一オリジンiframe内を検索
+      iframe.contentWindow.find(q, false, !forward, true, false, false, false);
+    } catch (e) {}
+  }
+  findInput.addEventListener("keydown", function (e) {
+    if (e.key === "Enter") {
+      e.preventDefault();
+      findInPage(!e.shiftKey);
+    } else if (e.key === "Escape") {
+      closeFind();
+    }
+  });
+  document.getElementById("findNext").addEventListener("click", function () {
+    findInPage(true);
+  });
+  document.getElementById("findPrev").addEventListener("click", function () {
+    findInPage(false);
+  });
+  document.getElementById("findClose").addEventListener("click", closeFind);
+
+  // キーボードショートカット（Ctrl/Cmd+F = ページ内検索, Alt+Home = ホーム）
+  document.addEventListener("keydown", function (e) {
+    if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "f") {
+      e.preventDefault();
+      openFind();
+    }
+  });
+
+  // ===== 初期化（設定の復元） =====
+  (function init() {
+    var s = lsGet("dsp_settings", null);
+    if (s) {
+      textmode.checked = !!s.text;
+      spamode.checked = !!s.spa;
+      minimode.checked = !!s.mini;
+      if (minimode.checked) spamode.checked = false;
+    }
+    setBookmarkState(null);
+  })();
 })();

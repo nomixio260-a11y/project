@@ -103,6 +103,108 @@ body {
   color: #9ee6a0;
   white-space: nowrap;
 }
+.star {
+  flex: 0 0 auto;
+  background: transparent;
+  font-size: 1.3rem;
+}
+.star.on {
+  color: #ffd34d;
+}
+
+/* ===== ページ内検索バー ===== */
+.findbar {
+  display: flex;
+  gap: 0.4rem;
+  align-items: center;
+  padding: 0.4rem 0.6rem;
+  background: #1f2228;
+}
+.findbar .address {
+  height: 36px;
+}
+
+/* ===== メニュー（ブックマーク／履歴） ===== */
+.scrim {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.25);
+  z-index: 19;
+}
+.menu {
+  position: absolute;
+  top: 56px;
+  right: 0.6rem;
+  width: min(360px, 92vw);
+  max-height: 75vh;
+  overflow: auto;
+  background: #fff;
+  color: #222;
+  border-radius: 12px;
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.3);
+  z-index: 20;
+  padding: 0.5rem;
+}
+.menu-actions {
+  display: flex;
+  gap: 0.4rem;
+  flex-wrap: wrap;
+  margin-bottom: 0.4rem;
+}
+.menu-actions button {
+  flex: 1 1 auto;
+  height: 38px;
+  border: 0;
+  border-radius: 8px;
+  background: #eef1f5;
+  color: #222;
+  font-size: 0.85rem;
+  cursor: pointer;
+}
+.menu-actions button:hover {
+  background: #e2e6ec;
+}
+.menu-sec h3 {
+  font-size: 0.8rem;
+  color: #667;
+  margin: 0.5rem 0.2rem 0.3rem;
+}
+.menu-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.menu-list li {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.45rem 0.4rem;
+  border-radius: 8px;
+  font-size: 0.9rem;
+}
+.menu-list li:hover {
+  background: #f3f5f8;
+}
+.menu-list .ml-link {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  cursor: pointer;
+  color: #1a56db;
+}
+.menu-list .ml-del {
+  border: 0;
+  background: transparent;
+  color: #999;
+  cursor: pointer;
+  font-size: 1rem;
+}
+.menu-empty {
+  color: #99a;
+  font-size: 0.85rem;
+}
 
 /* ===== ローディングバー ===== */
 .progress {
