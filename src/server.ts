@@ -7,10 +7,12 @@ import rateLimit from "@fastify/rate-limit";
 import { config } from "./config.js";
 import { registerUi } from "./routes/ui.js";
 import { registerBrowse } from "./routes/browse.js";
+import { registerInteract } from "./routes/interact.js";
 import { registerImage } from "./routes/image.js";
 import { registerVideo } from "./routes/video.js";
 import { registerAccessGuard } from "./security/accessGuard.js";
 import { closeBrowser } from "./pipeline/renderer.js";
+import { closeAllSessions } from "./pipeline/liveSession.js";
 
 export async function buildServer(): Promise<FastifyInstance> {
   const app = Fastify({
@@ -39,11 +41,13 @@ export async function buildServer(): Promise<FastifyInstance> {
 
   await registerUi(app);
   await registerBrowse(app);
+  await registerInteract(app);
   await registerImage(app);
   await registerVideo(app);
 
-  // 共有ヘッドレスブラウザをクリーンに終了する
+  // ライブセッションと共有ヘッドレスブラウザをクリーンに終了する
   app.addHook("onClose", async () => {
+    await closeAllSessions();
     await closeBrowser();
   });
 

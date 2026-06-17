@@ -59,6 +59,15 @@ export const config = {
   renderBlockMedia: process.env.RENDER_BLOCK_MEDIA !== "0",
   /** Chromiumを --no-sandbox で起動（コンテナ/root環境で必要。OSサンドボックスは弱まる） */
   renderNoSandbox: process.env.RENDER_NO_SANDBOX === "1",
+
+  /** ライブ操作モード（サーバー側の常駐ページを保持し、クリック/入力を再現して
+   *  最適化HTMLのスナップショットだけを返す方式）を有効化（既定ON）。
+   *  ピクセル映像を流す“リモートブラウザ”と違い、転送は最適化HTMLのみで省データ。 */
+  enableLiveSessions: process.env.ENABLE_LIVE_SESSIONS !== "0",
+  /** 同時に保持するライブセッション（常駐ページ）の最大数。メモリ保護 */
+  maxLiveSessions: intEnv("MAX_LIVE_SESSIONS", 4),
+  /** ライブセッションのアイドルTTL（ミリ秒）。これを超えたら常駐ページを破棄 */
+  liveSessionTtlMs: intEnv("LIVE_SESSION_TTL_MS", 5 * 60_000),
 } as const;
 
 export type AppConfig = typeof config;

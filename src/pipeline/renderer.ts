@@ -54,7 +54,7 @@ async function launchBrowser(): Promise<Browser> {
   return chromium.launch({ headless: true, args });
 }
 
-async function getBrowser(): Promise<Browser> {
+export async function getBrowser(): Promise<Browser> {
   if (!browserPromise) {
     browserPromise = launchBrowser().catch((err) => {
       // 起動失敗はキャッシュをリセットし、毎回再試行しない（availabilityで判定）
@@ -111,8 +111,28 @@ function releaseSlot(): void {
   if (next) next();
 }
 
-function clamp(n: number, lo: number, hi: number): number {
+export function clamp(n: number, lo: number, hi: number): number {
   return Math.max(lo, Math.min(hi, n));
+}
+
+/**
+ * SSRFガード付きの隔離コンテキストを生成する（renderPage / ライブセッション共通）。
+ * Cookie非共有・service worker遮断・ダウンロード禁止のモバイル相当コンテキスト。
+ */
+export async function newGuardedContext(
+  browser: Browser,
+  opts: { dw?: number; dpr?: number } = {},
+): Promise<BrowserContext> {
+  const context = await browser.newContext({
+    userAgent: MOBILE_UA,
+    viewport: { width: clamp(Math.round(opts.dw ?? 412), 320, 1280), height: 800 },
+    deviceScaleFactor: clamp(opts.dpr ?? 1, 1, 3),
+    serviceWorkers: "block",
+    acceptDownloads: false,
+    javaScriptEnabled: true,
+  });
+  await installGuardRoute(context);
+  return context;
 }
 
 /** ブラウザの各リクエストをSSRF検証し、重いリソースを遮断するルートを設置する。 */
@@ -172,15 +192,7 @@ export async function renderPage(url: string, opts: RenderOptions): Promise<Rend
 
   let context: BrowserContext | null = null;
   try {
-    context = await browser.newContext({
-      userAgent: MOBILE_UA,
-      viewport: { width: clamp(Math.round(opts.dw ?? 412), 320, 1280), height: 800 },
-      deviceScaleFactor: clamp(opts.dpr ?? 1, 1, 3),
-      serviceWorkers: "block",
-      acceptDownloads: false,
-      javaScriptEnabled: true,
-    });
-    await installGuardRoute(context);
+    context = await newGuardedContext(browser, { dw: opts.dw, dpr: opts.dpr });
 
     const page = await context.newPage();
     page.setDefaultNavigationTimeout(config.renderTimeoutMs);
